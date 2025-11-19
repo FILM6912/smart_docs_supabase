@@ -103,7 +103,7 @@ async def create_document(
                     detail=f"ไม่พบหมวดหมู่ '{category_name}' ในตาราง categories",
                 )
 
-        # สร้างเอกสารเปล่าๆ ก่อน (เฉพาะข้อมูลพื้นฐาน)
+
         insert_data = {
             "title": doc_data.title,
             "category_name": doc_data.category,
@@ -419,7 +419,12 @@ async def search_documents(
             )
             .execute()
         )
-        
+        print(result.data)
+        if result.data == []:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="ไม่พบเอกสารที่ตรงกับคำค้น",
+            )
         data = [
             {
                 "title": item["title"],
@@ -429,13 +434,11 @@ async def search_documents(
             }
             for item in result.data
         ]
-        if not data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="ไม่พบเอกสารที่ตรงกับคำค้น",
-            )
         return data
 
+    except HTTPException:
+        # ส่งต่อ HTTPException (เช่น 404) โดยไม่แปลงเป็น 500
+        raise
     except Exception as e:
         print(f"❌ Error searching documents: {e}")
         raise HTTPException(
