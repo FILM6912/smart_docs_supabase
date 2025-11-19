@@ -20,6 +20,7 @@ router = APIRouter()
 category_router = APIRouter()
 public_router = APIRouter()
 
+
 @router.get("/", response_model=list[DocumentResponse])
 async def list_documents(
     q: str | None = Query(None),
@@ -63,7 +64,9 @@ async def get_document(doc_id: int, current_user: dict = Depends(get_current_use
             .data
         )
         if not data:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบเอกสาร")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบเอกสาร"
+            )
         return DocumentResponse(**data[0])
     except HTTPException:
         raise
@@ -82,7 +85,7 @@ async def create_document(
         # ดึงข้อมูลจาก payload
         doc_data = payload.docData
         img_refs = payload.imgRef
-        
+
         # ตรวจสอบว่ามีหมวดหมู่นี้ในระบบหรือไม่
         category_name = doc_data.category
         if category_name:
@@ -97,9 +100,9 @@ async def create_document(
             if not cats:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"ไม่พบหมวดหมู่ '{category_name}' ในตาราง categories"
+                    detail=f"ไม่พบหมวดหมู่ '{category_name}' ในตาราง categories",
                 )
-        
+
         # สร้างเอกสารเปล่าๆ ก่อน (เฉพาะข้อมูลพื้นฐาน)
         insert_data = {
             "title": doc_data.title,
@@ -109,7 +112,7 @@ async def create_document(
             "created_by_id": current_user["id"],
             "embedding": get_embedding(doc_data.content),
         }
-        
+
         result = (
             supabase.schema("smart_documents")
             .table("documents")
@@ -117,19 +120,19 @@ async def create_document(
             .execute()
             .data
         )
-        
+
         # ดึง doc_id ที่เพิ่งสร้าง
         doc_id = result[0]["id"]
-        
+
         # ประมวลผลรูปภาพและอัปเดต content
         updated_content = process_document_images(doc_data.content, img_refs, doc_id)
-        
+
         # อัปเดตเอกสารด้วย content ที่มีรูปภาพแล้ว
         update_data = {
             "data": updated_content,
             "embedding": get_embedding(updated_content),
         }
-        
+
         updated_result = (
             supabase.schema("smart_documents")
             .table("documents")
@@ -138,7 +141,7 @@ async def create_document(
             .execute()
             .data
         )
-        
+
         return DocumentResponse(**updated_result[0])
     except HTTPException:
         raise
@@ -156,15 +159,22 @@ async def update_document(
     try:
         # ตรวจสอบว่ามีเอกสารนี้ในระบบหรือไม่
         existing = (
-            supabase.schema("smart_documents").table("documents").select("*").eq("id", doc_id).execute().data
+            supabase.schema("smart_documents")
+            .table("documents")
+            .select("*")
+            .eq("id", doc_id)
+            .execute()
+            .data
         )
         if not existing:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบเอกสาร")
-        
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบเอกสาร"
+            )
+
         # ดึงข้อมูลจาก payload
         doc_data = payload.docData
         img_refs = payload.imgRef
-        
+
         # ตรวจสอบว่ามีหมวดหมู่นี้ในระบบหรือไม่
         category_name = doc_data.category
         if category_name:
@@ -179,12 +189,12 @@ async def update_document(
             if not cats:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"ไม่พบหมวดหมู่ '{category_name}' ในตาราง categories"
+                    detail=f"ไม่พบหมวดหมู่ '{category_name}' ในตาราง categories",
                 )
-        
+
         # ประมวลผลรูปภาพและอัปเดต content
         updated_content = process_document_images(doc_data.content, img_refs, doc_id)
-        
+
         # สร้างข้อมูลสำหรับ update
         update_data = {
             "embedding": get_embedding(updated_content),
@@ -193,11 +203,16 @@ async def update_document(
             "data": updated_content,
             "last_updated": datetime.utcnow().isoformat(),
             "updated_by": current_user["full_name"],
-            "updated_by_id": current_user["id"]
+            "updated_by_id": current_user["id"],
         }
-        
+
         updated = (
-            supabase.schema("smart_documents").table("documents").update(update_data).eq("id", doc_id).execute().data
+            supabase.schema("smart_documents")
+            .table("documents")
+            .update(update_data)
+            .eq("id", doc_id)
+            .execute()
+            .data
         )
 
         return DocumentResponse(**updated[0])
@@ -211,20 +226,27 @@ async def update_document(
 
 
 @router.delete("/{doc_id}", response_model=dict)
-async def delete_document(
-    doc_id: int, current_user: dict = Depends(is_admin)
-):
+async def delete_document(doc_id: int, current_user: dict = Depends(is_admin)):
     try:
         exists = (
-            supabase.schema("smart_documents").table("documents").select("id").eq("id", doc_id).execute().data
+            supabase.schema("smart_documents")
+            .table("documents")
+            .select("id")
+            .eq("id", doc_id)
+            .execute()
+            .data
         )
         if not exists:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบเอกสาร")
-        
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบเอกสาร"
+            )
+
         # ลบรูปภาพที่เกี่ยวข้องกับเอกสาร
         delete_document_images(doc_id)
-        
-        supabase.schema("smart_documents").table("documents").delete().eq("id", doc_id).execute()
+
+        supabase.schema("smart_documents").table("documents").delete().eq(
+            "id", doc_id
+        ).execute()
         return {"message": "ลบเอกสารและรูปภาพที่เกี่ยวข้องสำเร็จ"}
     except HTTPException:
         raise
@@ -259,10 +281,17 @@ async def list_categories(
 async def get_category(cat_id: int, current_user: dict = Depends(get_current_user)):
     try:
         data = (
-            supabase.schema("smart_documents").table("categories").select("*").eq("id", cat_id).execute().data
+            supabase.schema("smart_documents")
+            .table("categories")
+            .select("*")
+            .eq("id", cat_id)
+            .execute()
+            .data
         )
         if not data:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบหมวดหมู่")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบหมวดหมู่"
+            )
         return CategoryResponse(**data[0])
     except HTTPException:
         raise
@@ -273,7 +302,9 @@ async def get_category(cat_id: int, current_user: dict = Depends(get_current_use
         )
 
 
-@category_router.post("/", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
+@category_router.post(
+    "/", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_category(
     payload: CategoryCreate, current_user: dict = Depends(is_admin)
 ):
@@ -282,7 +313,11 @@ async def create_category(
         insert_data["created_by"] = current_user["full_name"]
         insert_data["created_by_id"] = current_user["id"]
         result = (
-            supabase.schema("smart_documents").table("categories").insert(insert_data).execute().data
+            supabase.schema("smart_documents")
+            .table("categories")
+            .insert(insert_data)
+            .execute()
+            .data
         )
         return CategoryResponse(**result[0])
     except Exception as e:
@@ -298,15 +333,27 @@ async def update_category(
 ):
     try:
         exists = (
-            supabase.schema("smart_documents").table("categories").select("id").eq("id", cat_id).execute().data
+            supabase.schema("smart_documents")
+            .table("categories")
+            .select("id")
+            .eq("id", cat_id)
+            .execute()
+            .data
         )
         if not exists:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบหมวดหมู่")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบหมวดหมู่"
+            )
         update_data = payload.model_dump(exclude_unset=True)
         update_data["updated_by"] = current_user["full_name"]
         update_data["updated_by_id"] = current_user["id"]
         updated = (
-            supabase.schema("smart_documents").table("categories").update(update_data).eq("id", cat_id).execute().data
+            supabase.schema("smart_documents")
+            .table("categories")
+            .update(update_data)
+            .eq("id", cat_id)
+            .execute()
+            .data
         )
         return CategoryResponse(**updated[0])
     except HTTPException:
@@ -319,16 +366,23 @@ async def update_category(
 
 
 @category_router.delete("/{cat_id}", response_model=dict)
-async def delete_category(
-    cat_id: int, current_user: dict = Depends(is_admin)
-):
+async def delete_category(cat_id: int, current_user: dict = Depends(is_admin)):
     try:
         exists = (
-            supabase.schema("smart_documents").table("categories").select("id").eq("id", cat_id).execute().data
+            supabase.schema("smart_documents")
+            .table("categories")
+            .select("id")
+            .eq("id", cat_id)
+            .execute()
+            .data
         )
         if not exists:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบหมวดหมู่")
-        supabase.schema("smart_documents").table("categories").delete().eq("id", cat_id).execute()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบหมวดหมู่"
+            )
+        supabase.schema("smart_documents").table("categories").delete().eq(
+            "id", cat_id
+        ).execute()
         return {"message": "ลบหมวดหมู่สำเร็จ"}
     except HTTPException:
         raise
@@ -339,10 +393,10 @@ async def delete_category(
         )
 
 
-@public_router.get("/search", response_model=list[DocumentResponse])
+@public_router.get("/search")
 async def search_documents(
     query: str,
-    match_count: int = 10,
+    match_count: int = 5,
     match_threshold: float = 0.5,
     filter_category: Optional[str] = None,
 ) -> List[Dict]:
@@ -350,17 +404,32 @@ async def search_documents(
     try:
         # สร้าง embedding จาก query
         query_embedding = get_embedding(query)
-        
+
         # เรียกใช้ RPC function (ต้องสร้างใน schema smart_document)
-        result = supabase.schema('smart_documents').rpc('search_documents', {
-            'query_embedding': query_embedding,
-            'match_count': match_count,
-            'match_threshold': match_threshold,
-            'filter_category': filter_category
-        }).execute()
-        
-        return result.data
-    
+        result = (
+            supabase.schema("smart_documents")
+            .rpc(
+                "search_documents",
+                {
+                    "query_embedding": query_embedding,
+                    "match_count": match_count,
+                    "match_threshold": match_threshold,
+                    "filter_category": filter_category,
+                },
+            )
+            .execute()
+        )
+
+        # แปลงผลลัพธ์ให้อยู่ในรูปแบบ list ของ dict
+        return [
+            {
+                "title": item["title"],
+                "content": item["data"],
+                "category": item["category_name"],
+            }
+            for item in result.data
+        ]
+
     except Exception as e:
         print(f"❌ Error searching documents: {e}")
         raise
