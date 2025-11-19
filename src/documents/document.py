@@ -419,17 +419,26 @@ async def search_documents(
             )
             .execute()
         )
-
-        # แปลงผลลัพธ์ให้อยู่ในรูปแบบ list ของ dict
-        return [
+        
+        data = [
             {
                 "title": item["title"],
                 "content": item["data"],
                 "category": item["category_name"],
+                "score": item["similarity"],
             }
             for item in result.data
         ]
+        if not data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="ไม่พบเอกสารที่ตรงกับคำค้น",
+            )
+        return data
 
     except Exception as e:
         print(f"❌ Error searching documents: {e}")
-        raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"เกิดข้อผิดพลาดในการค้นหาเอกสาร: {str(e)}",
+        )
