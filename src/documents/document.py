@@ -14,22 +14,32 @@ from .model import (
 )
 from .documents_utils import process_document_images, delete_document_images
 from .embeding import get_embedding
+from typing import List, Dict, Optional
 
 router = APIRouter()
 category_router = APIRouter()
+public_router = APIRouter()
 
 @router.get("/", response_model=list[DocumentResponse])
 async def list_documents(
     q: str | None = Query(None),
     category_name: str | None = Query(None),
+    department: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: dict = Depends(get_current_user),
 ):
     try:
+        # ถ้าไม่ได้ส่ง department มา ให้ใช้ department ของ user ปัจจุบัน
+        if department is None:
+            department = current_user.get("department")
+
         query = supabase.schema("smart_documents").table("documents").select("*")
         if category_name:
             query = query.eq("category_name", category_name)
+        # ถ้า department เป็น "*" ให้ดึงทุกแผนก จึงไม่ต้องเพิ่มเงื่อนไข
+        if department and department != "*":
+            query = query.eq("department", department)
         if q:
             query = query.ilike("title", f"%{q}%")
         data = query.range(offset, offset + limit - 1).execute().data
@@ -328,3 +338,29 @@ async def delete_category(
             detail=f"เกิดข้อผิดพลาดในการลบหมวดหมู่: {str(e)}",
         )
 
+
+@public_router.get("/search", response_model=list[DocumentResponse])
+async def search_documents(
+    query: str,
+    match_count: int = 10,
+    match_threshold: float = 0.5,
+    filter_category: Optional[str] = None,
+) -> List[Dict]:
+    """ค้นหาเอกสารด้วย vector similarity"""
+    try:
+        # สร้าง embedding จาก query
+        query_embedding = get_embedding(query)
+        
+        # เรียกใช้ RPC function (ต้องสร้างใน schema smart_document)
+        result = supabase.schema('smart_documents').rpc('search_documents', {
+            'query_embedding': query_embedding,
+            'match_count': match_count,
+            'match_threshold': match_threshold,
+            'filter_category': filter_category
+        }).execute()
+        
+        return result.data
+    
+    except Exception as e:
+        print(f"❌ Error searching documents: {e}")
+        raise
