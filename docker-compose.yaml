@@ -1,0 +1,11 @@
+services:
+  smart_docs:
+    build: .
+    container_name: smart_docs
+    ports:
+      - 8002:8002
+    env_file:
+      - .env
+
+    command: python /app/main.py
+    

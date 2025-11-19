@@ -1,0 +1,7 @@
+supabase
+fastapi-mcp
+uvicorn
+pydantic[email]
+python-jose
+passlib
+openai
