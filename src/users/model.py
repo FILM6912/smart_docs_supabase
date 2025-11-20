@@ -25,6 +25,10 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     password: Optional[str] = Field(None, min_length=8)
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=1, description="รหัสผ่านปัจจุบัน")
+    new_password: str = Field(..., min_length=6, description="รหัสผ่านใหม่ (ต้องมีความยาวอย่างน้อย 6 ตัวอักษร)")
+
 class UserResponse(UserBase):
     id: str
     created_at: Optional[datetime] = None

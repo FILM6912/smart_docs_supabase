@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
 from ..auth.auth_utils import (
@@ -8,15 +9,15 @@ from ..auth.auth_utils import (
     is_user,
     is_admin,
     is_superadmin,
+    verify_password,
 )
 from ..database import supabase, upload_profile_image, delete_user_profile_image
-from .model import UserCreate, UserUpdate, UserResponse
+from .model import UserCreate, UserUpdate, UserResponse, ChangePasswordRequest
 import os
 from dotenv import load_dotenv
 import base64
 import uuid
 import re
-
 load_dotenv()
 
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
@@ -121,6 +122,7 @@ async def update_user_profile(
 ):
     """อัปเดตข้อมูลโปรไฟล์ผู้ใช้โดยใช้ form data และไฟล์"""
     # Convert empty strings to None for proper handling
+    print("image_file",image_profile)
     if full_name == "":
         full_name = None
     if department == "":
@@ -227,7 +229,8 @@ async def update_user_profile(
 
         # อ่านข้อมูลไฟล์และแปลงเป็น base64
         file_content = await image_profile.read()
-        base64_image = base64.b64encode(file_content).decode("utf-8")
+        base64_image_data = base64.b64encode(file_content).decode("utf-8")
+        base64_image = f"data:{image_profile.content_type};base64,{base64_image_data}"
 
         # อัปโหลดรูปภาพ
         try:
@@ -310,7 +313,8 @@ async def upload_profile_image_file(
 
         # อ่านข้อมูลไฟล์และแปลงเป็น base64
         file_content = await file.read()
-        base64_image = base64.b64encode(file_content).decode("utf-8")
+        base64_image_data = base64.b64encode(file_content).decode("utf-8")
+        base64_image = f"data:{file.content_type};base64,{base64_image_data}"
 
         # อัปโหลดรูปภาพ
         result = upload_profile_image(current_user["id"], base64_image)
@@ -506,4 +510,52 @@ async def get_all_users(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"เกิดข้อผิดพลาดในการดึงข้อมูลผู้ใช้: {str(e)}",
+        )
+
+
+@router.post("/change-password", response_model=dict)
+async def change_password(
+    password_data: ChangePasswordRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """เปลี่ยนรหัสผ่านสำหรับผู้ใช้ปัจจุบัน"""
+    try:
+        # 1. ดึงรหัสผ่านปัจจุบันจากฐานข้อมูล
+        user_data = (
+            supabase.schema("smart_documents")
+            .table("users")
+            .select("password")
+            .eq("id", current_user["id"])
+            .execute()
+            .data
+        )
+        
+        if not user_data:
+             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบผู้ใช้")
+        
+        stored_password_hash = user_data[0]["password"]
+
+        # 2. ตรวจสอบรหัสผ่านเดิม
+        if not verify_password(password_data.old_password, stored_password_hash):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"success": False, "message": "รหัสผ่านปัจจุบันไม่ถูกต้อง"}
+            )
+        
+        # 3. เข้ารหัสรหัสผ่านใหม่
+        new_password_hash = get_password_hash(password_data.new_password)
+
+        # 4. อัปเดตรหัสผ่านในฐานข้อมูล
+        supabase.schema("smart_documents").table("users").update({
+            "password": new_password_hash
+        }).eq("id", current_user["id"]).execute()
+
+        return {"success": True, "message": "เปลี่ยนรหัสผ่านสำเร็จ"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"เกิดข้อผิดพลาดในการเปลี่ยนรหัสผ่าน: {str(e)}"
         )

@@ -140,7 +140,7 @@ def upload_profile_image(user_id: str, image_data: str, filename: str = None):
         response = supabase.storage.from_("image_profile").upload(
             path=storage_path,
             file=image_bytes,
-            file_options={"content-type": content_type}
+            file_options={"content-type": content_type, "upsert": "true"}
         )
         
         # ดึง URL สาธารณะของรูปภาพ
