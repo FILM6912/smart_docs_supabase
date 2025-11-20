@@ -135,15 +135,17 @@ async def check_token_expiry(token: str):
     """
     ตรวจสอบว่า access-token หมดอายุหรือยัง และคำนวณเวลาที่เหลือ
     """
-    # ถ้า token ขึ้นต้นด้วย "Bearer " ให้ตัดออก
     token = token.replace("Bearer ", "") if token.startswith("Bearer ") else token
 
     try:
-        # decode โดยไม่ verify signature (ใช้ได้เพราะเราแค่ต้องการดู exp)
+        # decode โดยไม่ verify signature และไม่ verify expiration
         payload = jwt.decode(
             token,
-            key="",  # ใส่ key ว่างเพื่อไม่ต้องการ verify signature
-            options={"verify_signature": False}
+            key="",
+            options={
+                "verify_signature": False,
+                "verify_exp": False  # ← เพิ่มบรรทัดนี้
+            }
         )
         exp = payload.get("exp")
         if not exp:
@@ -163,7 +165,6 @@ async def check_token_expiry(token: str):
                 "remaining_human": "หมดอายุแล้ว"
             }
 
-        # แปลงเวลาที่เหลือให้อ่านง่ายในรูปแบบ "X day HH:MM:SS"
         days = remaining.days
         hours, remainder = divmod(remaining.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -176,7 +177,6 @@ async def check_token_expiry(token: str):
             "remaining_days": days,
             "remaining_human": human_str
         }
-
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
