@@ -63,6 +63,21 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise credentials_exception
     
+    # ตรวจสอบสถานะการใช้งานของผู้ใช้จากฐานข้อมูล
+    try:
+        response = supabase.schema("smart_documents").table("users").select("is_active").eq("id", token_data.id).execute().data
+        if not response or not response[0].get("is_active", True):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is deactivated",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except HTTPException:
+        raise
+    except:
+        # ถ้าไม่สามารถตรวจสอบจากฐานข้อมูลได้ ให้ใช้ค่าเริ่มต้น (active)
+        pass
+    
     user = {
         "id": token_data.id,
         "email": token_data.email,
@@ -119,3 +134,30 @@ async def is_superadmin(current_user: dict = Depends(get_current_user)):
             detail="Superadmin access required"
         )
     return current_user
+
+def validate_user_token(token: str):
+    """
+    ตรวจสอบ token ว่าถูกต้องและผู้ใช้มีสถานะ active หรือไม่
+    ใช้สำหรับตรวจสอบ token ที่ไม่ได้ผ่าน dependency injection
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("id")
+        
+        if not user_id:
+            return False, "Invalid token"
+        
+        # ตรวจสอบสถานะการใช้งานของผู้ใช้จากฐานข้อมูล
+        response = supabase.schema("smart_documents").table("users").select("is_active").eq("id", user_id).execute().data
+        
+        if not response:
+            return False, "User not found"
+        
+        if not response[0].get("is_active", True):
+            return False, "Account is deactivated"
+        
+        return True, "Token is valid"
+    except JWTError:
+        return False, "Invalid token"
+    except Exception as e:
+        return False, f"Error validating token: {str(e)}"

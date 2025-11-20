@@ -134,8 +134,22 @@ async def create_user(
 async def check_token_expiry(token: str):
     """
     ตรวจสอบว่า access-token หมดอายุหรือยัง และคำนวณเวลาที่เหลือ
+    พร้อมตรวจสอบสถานะการใช้งานของผู้ใช้
     """
+    from .auth_utils import validate_user_token
+    
     token = token.replace("Bearer ", "") if token.startswith("Bearer ") else token
+
+    # ตรวจสอบความถูกต้องของ token และสถานะผู้ใช้
+    is_valid, message = validate_user_token(token)
+    if not is_valid:
+        return {
+            "is_valid": False,
+            "is_expired": True,
+            "message": message,
+            "remaining_days": 0,
+            "remaining_human": "Token ไม่ถูกต้องหรือบัญชีถูกปิดใช้งาน"
+        }
 
     try:
         # decode โดยไม่ verify signature และไม่ verify expiration
@@ -160,6 +174,7 @@ async def check_token_expiry(token: str):
 
         if remaining.total_seconds() <= 0:
             return {
+                "is_valid": False,
                 "is_expired": True,
                 "remaining_days": 0,
                 "remaining_human": "หมดอายุแล้ว"
@@ -172,6 +187,7 @@ async def check_token_expiry(token: str):
         human_str = f"{days} day {hours:02d}:{minutes:02d}:{seconds:02d}"
 
         return {
+            "is_valid": True,
             "is_expired": False,
             "expiry_at_utc": exp_dt.isoformat(),
             "remaining_days": days,

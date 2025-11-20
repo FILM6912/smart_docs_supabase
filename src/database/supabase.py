@@ -69,6 +69,10 @@ def login_supabase(
         user = response[0]
         if not pwd_context.verify(password, user["password"]):
             raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        # ตรวจสอบสถานะการใช้งานของผู้ใช้
+        if not user.get("is_active", True):  # ค่าเริ่มต้นเป็น True ถ้าไม่มีฟิลด์นี้
+            raise HTTPException(status_code=403, detail="Account is deactivated")
             
         return user
     except HTTPException:
