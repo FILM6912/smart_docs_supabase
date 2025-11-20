@@ -110,16 +110,29 @@ async def get_user_profile(
 async def update_user_profile(
     user_id_or_email: str,
     image_profile: UploadFile = File(None),
-    full_name: str = Form(None),
-    department: str = Form(None),
-    level: str = Form(None),
-    email: str = Form(None),
-    role: str = Form(None),
+    full_name: str = Form(""),
+    department: str = Form(""),
+    level: str = Form(""),
+    email: str = Form(""),
+    role: str = Form(""),
     is_active: bool = Form(None),
-    password: str = Form(None),
+    password: str = Form(""),
     current_user: dict = Depends(get_current_user),
 ):
     """อัปเดตข้อมูลโปรไฟล์ผู้ใช้โดยใช้ form data และไฟล์"""
+    # Convert empty strings to None for proper handling
+    if full_name == "":
+        full_name = None
+    if department == "":
+        department = None
+    if level == "":
+        level = None
+    if email == "":
+        email = None
+    if role == "":
+        role = None
+    if password == "":
+        password = None
     # ตรวจสอบว่าเป็น email หรือ ID
     email_pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
     is_email = re.match(email_pattern, user_id_or_email) is not None
@@ -160,9 +173,9 @@ async def update_user_profile(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="ไม่มีสิทธิ์ในการอัปเดตโปรไฟล์นี้"
             )
-        elif current_user["id"] != user["id"]:
+        elif current_user["id"] != user["id"] and current_user["role"] != "superadmin":
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="ไม่มีสิทธิ์ในการลบผู้ใช้นี้"
+                status_code=status.HTTP_403_FORBIDDEN, detail="ไม่มีสิทธิ์ในการอัปเดตโปรไฟล์นี้"
             )
 
     except HTTPException:
@@ -185,24 +198,24 @@ async def update_user_profile(
     # สร้างข้อมูลที่จะอัปเดต
     update_data = {}
 
-    # เพิ่มข้อมูลที่ไม่ใช่ None
-    if full_name is not None:
+    # เพิ่มข้อมูลที่ไม่ใช่ None และไม่ใช่ empty string
+    if full_name is not None and full_name != "":
         update_data["full_name"] = full_name
-    if department is not None:
+    if department is not None and department != "":
         update_data["department"] = department
-    if level is not None:
+    if level is not None and level != "":
         update_data["level"] = level
-    if email is not None:
+    if email is not None and email != "":
         update_data["email"] = email
-    if role is not None:
+    if role is not None and role != "":
         update_data["role"] = role
     if is_active is not None:
         update_data["is_active"] = is_active
-    if password is not None:
+    if password is not None and password != "":
         update_data["password"] = get_password_hash(password)
 
     # ถ้ามีการอัปโหลดรูปภาพ
-    if image_profile is not None:
+    if image_profile is not None and image_profile.filename != "":
         # ตรวจสอบประเภทไฟล์
         if not image_profile.content_type or not image_profile.content_type.startswith(
             "image/"
@@ -267,7 +280,9 @@ async def update_user_profile(
         level=updated_user.get("level"),
         image_profile=updated_user.get("image_profile"),
         role=updated_user["role"],
-        is_active=updated_user.get("is_active", True),
+        is_active=updated_user.get("is_active", None),
+        created_at= updated_user.get("created_at", True),
+        updated_at= updated_user.get("updated_at", True),
     )
 
 
