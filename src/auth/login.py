@@ -12,7 +12,9 @@ from .auth_utils import (
 )
 from ..database import login_supabase, signup_supabase
 import os
+from datetime import datetime, timezone
 from dotenv import load_dotenv
+from jose import JWTError, jwt
 
 load_dotenv()
 
@@ -127,3 +129,56 @@ async def create_user(
     """
     hashed_password = get_password_hash(password)
     return signup_supabase(email=email, password=hashed_password, full_name=full_name,department=department)
+
+@router.get("/check-token", response_model=dict)
+async def check_token_expiry(token: str):
+    """
+    ตรวจสอบว่า access-token หมดอายุหรือยัง และคำนวณเวลาที่เหลือ
+    """
+    # ถ้า token ขึ้นต้นด้วย "Bearer " ให้ตัดออก
+    token = token.replace("Bearer ", "") if token.startswith("Bearer ") else token
+
+    try:
+        # decode โดยไม่ verify signature (ใช้ได้เพราะเราแค่ต้องการดู exp)
+        payload = jwt.decode(
+            token,
+            key="",  # ใส่ key ว่างเพื่อไม่ต้องการ verify signature
+            options={"verify_signature": False}
+        )
+        exp = payload.get("exp")
+        if not exp:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Token ไม่มีข้อมูลวันหมดอายุ"
+            )
+
+        exp_dt = datetime.fromtimestamp(exp, tz=timezone.utc)
+        now = datetime.now(timezone.utc)
+        remaining = exp_dt - now
+
+        if remaining.total_seconds() <= 0:
+            return {
+                "is_expired": True,
+                "remaining_days": 0,
+                "remaining_human": "หมดอายุแล้ว"
+            }
+
+        # แปลงเวลาที่เหลือให้อ่านง่ายในรูปแบบ "X day HH:MM:SS"
+        days = remaining.days
+        hours, remainder = divmod(remaining.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        
+        human_str = f"{days} day {hours:02d}:{minutes:02d}:{seconds:02d}"
+
+        return {
+            "is_expired": False,
+            "expiry_at_utc": exp_dt.isoformat(),
+            "remaining_days": days,
+            "remaining_human": human_str
+        }
+
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token ไม่ถูกต้องหรือไม่สามารถอ่านได้"
+        )
