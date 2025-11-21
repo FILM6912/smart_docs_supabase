@@ -6,6 +6,8 @@ from src.users.users import router as users_router
 from src.documents.document import router as documents_router, category_router as categories_router, public_router as public_documents_router
 from fastapi_mcp import FastApiMCP
 
+from datetime import datetime
+
 app = FastAPI(
     title="Smart Documents API",
     description="API for Smart Documents Management System",

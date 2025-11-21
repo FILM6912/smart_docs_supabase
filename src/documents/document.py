@@ -32,17 +32,33 @@ async def list_documents(
 ):
     try:
         # ถ้าไม่ได้ส่ง department มา ให้ใช้ department ของ user ปัจจุบัน
-        if department is None:
+        
+        if department is None or department == "":
             department = current_user.get("department")
+        
+        # Debug: แสดงค่า department ที่ได้รับ
+        print(f"Debug - department parameter: {department}")
+        print(f"Debug - current_user: {current_user}")
+        print(f"Debug - current_user.get('department'): {current_user.get('department')}")
 
         query = supabase.schema("smart_documents").table("documents").select("*")
         if category_name:
             query = query.eq("category_name", category_name)
         # ถ้า department เป็น "*" ให้ดึงทุกแผนก จึงไม่ต้องเพิ่มเงื่อนไข
+        if current_user["role"] in ["admin", "superadmin"]:
+            department="*"
         if department and department != "*":
-            query = query.eq("department", department)
+            # ดึงข้อมูล categories ที่อยู่ใน department ที่ระบุ
+            categories_in_dept = supabase.schema("smart_documents").table("categories").select("name").eq("department", department).execute().data
+            category_names = [cat["name"] for cat in categories_in_dept]
+            if category_names:
+                query = query.in_("category_name", category_names)
+            else:
+                # ถ้าไม่มี categories ใน department ที่ระบุ ให้คืนค่าว่าง
+                return []
         if q:
             query = query.ilike("title", f"%{q}%")
+
         data = query.range(offset, offset + limit - 1).execute().data
         return [DocumentResponse(**item) for item in data]
     except Exception as e:
@@ -102,7 +118,6 @@ async def create_document(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"ไม่พบหมวดหมู่ '{category_name}' ในตาราง categories",
                 )
-
 
         insert_data = {
             "title": doc_data.title,
@@ -266,8 +281,12 @@ async def list_categories(
 ):
     try:
         query = supabase.schema("smart_documents").table("categories").select("*")
-        if department:
+        if department == "*":...
+        elif current_user["role"] in ["admin", "superadmin"]:...
+        elif department:
             query = query.eq("department", department)
+        else:
+            query = query.eq("department", current_user["department"])
         data = query.range(offset, offset + limit - 1).execute().data
         return [CategoryResponse(**item) for item in data]
     except Exception as e:
@@ -371,15 +390,27 @@ async def delete_category(cat_id: int, current_user: dict = Depends(is_admin)):
         exists = (
             supabase.schema("smart_documents")
             .table("categories")
-            .select("id")
+            .select("id,name")
             .eq("id", cat_id)
             .execute()
             .data
         )
+
         if not exists:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="ไม่พบหมวดหมู่"
             )
+
+        if (
+            supabase.schema("smart_documents")
+            .table("documents")
+            .select("category_name")
+            .eq("category_name", exists[0]["name"])
+            .execute()
+            .data
+        ):
+            raise HTTPException(status_code=423, detail="ข้อมูลนี้กำลังถูกใช้งานอยู่ ไม่สามารถลบได้")
+
         supabase.schema("smart_documents").table("categories").delete().eq(
             "id", cat_id
         ).execute()
