@@ -45,8 +45,15 @@ async def list_documents(
         if category_name:
             query = query.eq("category_name", category_name)
         # ถ้า department เป็น "*" ให้ดึงทุกแผนก จึงไม่ต้องเพิ่มเงื่อนไข
-        if current_user["role"] in ["admin", "superadmin"]:
+        if current_user["role"] in ["superadmin"]:
             department="*"
+
+        if current_user["role"] in ["admin","user"] and department == "*":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ไม่มีสิทธิ์ในการดึงเอกสารทั้งหมด",
+            )
+        
         if department and department != "*":
             # ดึงข้อมูล categories ที่อยู่ใน department ที่ระบุ
             categories_in_dept = supabase.schema("smart_documents").table("categories").select("name").eq("department", department).execute().data
@@ -281,8 +288,13 @@ async def list_categories(
 ):
     try:
         query = supabase.schema("smart_documents").table("categories").select("*")
-        if department == "*":...
-        elif current_user["role"] in ["admin", "superadmin"]:...
+
+        if current_user["role"] in ["admin","user"] and department == "*":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ไม่มีสิทธิ์ในการดึงเอกสารทั้งหมด",
+            )
+        elif current_user["role"] in ["superadmin"]:...
         elif department:
             query = query.eq("department", department)
         else:
