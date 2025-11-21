@@ -481,13 +481,29 @@ async def get_all_users(
 ):
     """ดึงข้อมูลผู้ใช้ทั้งหมด (เฉพาะ admin และ superadmin)"""
     try:
-        users = (
-            supabase.schema("smart_documents")
-            .table("users")
-            .select("*")
-            .execute()
-            .data
-        )
+        # ตรวจสอบ role ของผู้ใช้ปัจจุบัน
+        if current_user.get("role") == "superadmin":
+            # superadmin สามารถดูผู้ใช้ทั้งหมด
+            users = (
+                supabase.schema("smart_documents")
+                .table("users")
+                .select("*")
+                .execute()
+                .data
+            )
+        else:
+            # admin สามารถดูเฉพาะผู้ใช้ใน department เดียวกัน และไม่ใช่ superadmin
+            current_department = current_user.get("department")
+            users = (
+                supabase.schema("smart_documents")
+                .table("users")
+                .select("*")
+                .eq("department", current_department)
+                .neq("role", "superadmin")
+                .execute()
+                .data
+            )
+            
         if not users:
             return []
 
